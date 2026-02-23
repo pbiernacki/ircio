@@ -19,8 +19,7 @@ jobs:
         os:
           - ubuntu-latest       # Linux x86-64
           - ubuntu-24.04-arm    # Linux aarch64
-          - macos-latest        # macOS arm64  (Apple Silicon)
-          - macos-13            # macOS x86-64 (Intel)
+          - macos-latest        # macOS arm64 (Apple Silicon)
           - windows-latest      # Windows x86-64
         python-version:
           - "3.14"
