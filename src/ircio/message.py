@@ -3,6 +3,27 @@
 
 from dataclasses import dataclass, field
 
+_STRIP_CTRL = str.maketrans("", "", "\r\n\0")
+
+_TAG_VALUE_ESCAPE = str.maketrans(
+    {
+        "\\": "\\\\",
+        ";": "\\:",
+        " ": "\\s",
+        "\r": "\\r",
+        "\n": "\\n",
+        "\0": "",
+    }
+)
+
+_TAG_UNESCAPE: dict[str, str] = {
+    ":": ";",
+    "s": " ",
+    "\\": "\\",
+    "r": "\r",
+    "n": "\n",
+}
+
 
 @dataclass
 class Message:
@@ -33,7 +54,16 @@ class Message:
                     continue
                 if "=" in tag:
                     k, _, v = tag.partition("=")
-                    tags[k] = v
+                    # unescape IRCv3 tag value
+                    out, i = [], 0
+                    while i < len(v):
+                        if v[i] == "\\" and i + 1 < len(v):
+                            out.append(_TAG_UNESCAPE.get(v[i + 1], v[i + 1]))
+                            i += 2
+                        else:
+                            out.append(v[i])
+                            i += 1
+                    tags[k] = "".join(out)
                 else:
                     tags[tag] = ""
 
@@ -65,17 +95,23 @@ class Message:
         parts: list[str] = []
 
         if self.tags:
-            tag_str = ";".join(f"{k}={v}" if v else k for k, v in self.tags.items())
+            tag_str = ";".join(
+                f"{k.translate(_STRIP_CTRL)}={v.translate(_TAG_VALUE_ESCAPE)}"
+                if v
+                else k.translate(_STRIP_CTRL)
+                for k, v in self.tags.items()
+            )
             parts.append(f"@{tag_str}")
 
         if self.prefix:
-            parts.append(f":{self.prefix}")
+            parts.append(f":{self.prefix.translate(_STRIP_CTRL)}")
 
         parts.append(self.command)
 
         if self.params:
             *middle, last = self.params
-            parts.extend(middle)
+            parts.extend(p.translate(_STRIP_CTRL) for p in middle)
+            last = last.translate(_STRIP_CTRL)
             # Use trailing syntax when the last param contains spaces,
             # starts with ':', or is empty.
             if not last or " " in last or last.startswith(":"):

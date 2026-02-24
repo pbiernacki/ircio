@@ -57,6 +57,15 @@ class TestMessageParse:
         assert msg.command == "MOTD"
         assert msg.params == []
 
+    def test_tag_value_unescaping(self):
+        msg = Message.parse(r"@k=\:\s\\\r\n :n!u@h PRIVMSG #ch :hi")
+        assert msg.tags["k"] == ";" + " " + "\\" + "\r" + "\n"
+
+    def test_tag_value_unknown_escape(self):
+        # Unknown escape sequence: backslash is dropped, letter kept
+        msg = Message.parse(r"@k=\x :n!u@h PRIVMSG #ch :hi")
+        assert msg.tags["k"] == "x"
+
 
 class TestMessageStr:
     def test_round_trip_simple(self):
@@ -96,3 +105,26 @@ class TestMessageStr:
         # Params that start with ':' must use trailing syntax
         msg = Message("TEST", [":starts-with-colon"])
         assert str(msg) == "TEST ::starts-with-colon"
+
+    def test_crlf_in_param_stripped(self):
+        msg = Message("PRIVMSG", ["#ch", "hi\r\nJOIN #evil"])
+        serialized = str(msg)
+        assert "\r" not in serialized
+        assert "\n" not in serialized
+
+    def test_nul_in_param_stripped(self):
+        msg = Message("PRIVMSG", ["#ch", "hi\0there"])
+        assert "\0" not in str(msg)
+
+    def test_tag_value_escaping(self):
+        msg = Message("PRIVMSG", ["#ch", "hi"], tags={"k": "; \\\r\n"})
+        serialized = str(msg)
+        # Extract tag string between @ and first space
+        tag_str = serialized.split(" ")[0][1:]  # strip leading @
+        assert tag_str == r"k=\:\s\\\r\n"
+
+    def test_tag_value_round_trip(self):
+        original = Message("PRIVMSG", ["#ch", "hello"], tags={"k": "; \\\r\nworld"})
+        reparsed = Message.parse(str(original))
+        assert reparsed.tags["k"] == original.tags["k"]
+        assert reparsed.params == ["#ch", "hello"]

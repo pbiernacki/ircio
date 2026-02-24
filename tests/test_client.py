@@ -308,3 +308,23 @@ async def test_sasl_fail_raises(sasl_client: Client, mock_conn: MagicMock):
     msg = Message.parse(":srv 904 testnick :SASL authentication failed")
     with pytest.raises(IRCAuthenticationError):
         await sasl_client._on_sasl_fail(msg)
+
+
+async def test_send_strips_crlf() -> None:
+    """Connection.send() must not let embedded CRLF reach the wire."""
+    from unittest.mock import AsyncMock, MagicMock
+
+    from ircio.connection import Connection
+    from ircio.message import Message
+
+    conn = Connection("h", 1)
+    writer = MagicMock()
+    writer.write = MagicMock()
+    writer.drain = AsyncMock()
+    conn._writer = writer
+
+    msg = Message("PRIVMSG", ["#ch", "hello\r\nJOIN #evil"])
+    await conn.send(msg)
+
+    written: bytes = writer.write.call_args.args[0]
+    assert b"\r\n" not in written[:-2], "embedded CRLF must be stripped before write"
