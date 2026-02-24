@@ -4,6 +4,8 @@
 from dataclasses import dataclass, field
 
 _STRIP_CTRL = str.maketrans("", "", "\r\n\0")
+_STRIP_TAG_KEY = str.maketrans("", "", "\r\n\0; =")
+_STRIP_MIDDLE = str.maketrans("", "", "\r\n\0 ")
 
 _TAG_VALUE_ESCAPE = str.maketrans(
     {
@@ -96,9 +98,9 @@ class Message:
 
         if self.tags:
             tag_str = ";".join(
-                f"{k.translate(_STRIP_CTRL)}={v.translate(_TAG_VALUE_ESCAPE)}"
+                f"{k.translate(_STRIP_TAG_KEY)}={v.translate(_TAG_VALUE_ESCAPE)}"
                 if v
-                else k.translate(_STRIP_CTRL)
+                else k.translate(_STRIP_TAG_KEY)
                 for k, v in self.tags.items()
             )
             parts.append(f"@{tag_str}")
@@ -106,11 +108,11 @@ class Message:
         if self.prefix:
             parts.append(f":{self.prefix.translate(_STRIP_CTRL)}")
 
-        parts.append(self.command)
+        parts.append(self.command.translate(_STRIP_CTRL))
 
         if self.params:
             *middle, last = self.params
-            parts.extend(p.translate(_STRIP_CTRL) for p in middle)
+            parts.extend(p.translate(_STRIP_MIDDLE) for p in middle)
             last = last.translate(_STRIP_CTRL)
             # Use trailing syntax when the last param contains spaces,
             # starts with ':', or is empty.
