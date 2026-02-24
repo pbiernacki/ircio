@@ -15,8 +15,8 @@ class Connection:
     Handles raw byte I/O and delegates parsing to Message.
 
     The ``ssl`` parameter accepts three values:
+    - ``True``  (default)       — TLS with the default system CA store
     - ``False``                 — plain TCP (no TLS)
-    - ``True``                  — TLS with the default system CA store
     - ``ssl.SSLContext``        — TLS with a custom context (client certs, custom CA, …)
     """
 
@@ -25,7 +25,7 @@ class Connection:
         host: str,
         port: int,
         *,
-        ssl: bool | ssl_module.SSLContext = False,
+        ssl: bool | ssl_module.SSLContext = True,
         encoding: str = "utf-8",
     ) -> None:
         self.host = host
