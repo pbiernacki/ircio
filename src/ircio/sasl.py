@@ -5,6 +5,8 @@ from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from .exceptions import IRCAuthenticationError
+
 if TYPE_CHECKING:
     from cryptography.hazmat.primitives.asymmetric.ec import EllipticCurvePrivateKey
 
@@ -34,6 +36,12 @@ class SASLMechanism(ABC):
         Returns:
             Raw bytes for the client response (base64-encoding is done by the
             caller). Return ``b""`` to send ``+``.
+        """
+
+    def reset(self) -> None:  # noqa: B027
+        """Reset authentication state (called automatically before each connect).
+
+        Stateless mechanisms (PLAIN, EXTERNAL) do not need to override this.
         """
 
 
@@ -121,7 +129,7 @@ class SASLEcdsaNist256pChallenge(SASLMechanism):
         return cls(username, key)  # type: ignore[arg-type]
 
     def reset(self) -> None:
-        """Reset authentication state — call before reconnecting."""
+        """Reset authentication state (called automatically before each connect)."""
         self._step = 0
 
     def step(self, challenge: bytes) -> bytes:
@@ -129,11 +137,17 @@ class SASLEcdsaNist256pChallenge(SASLMechanism):
             self._step += 1
             return self.username.encode()
 
-        # Step 1: sign the server challenge (DER-encoded ECDSA signature)
-        try:
-            from cryptography.hazmat.primitives import hashes
-            from cryptography.hazmat.primitives.asymmetric import ec
-        except ImportError as exc:
-            raise ImportError(_CRYPTOGRAPHY_MISSING) from exc
+        if self._step == 1:
+            self._step += 1
+            # Sign the server challenge (DER-encoded ECDSA signature, SHA-256).
+            try:
+                from cryptography.hazmat.primitives import hashes
+                from cryptography.hazmat.primitives.asymmetric import ec
+            except ImportError as exc:
+                raise ImportError(_CRYPTOGRAPHY_MISSING) from exc
 
-        return self._private_key.sign(challenge, ec.ECDSA(hashes.SHA256()))
+            return self._private_key.sign(challenge, ec.ECDSA(hashes.SHA256()))
+
+        raise IRCAuthenticationError(
+            "Unexpected AUTHENTICATE message after ECDSA exchange completed"
+        )

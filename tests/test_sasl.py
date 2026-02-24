@@ -4,6 +4,8 @@
 import inspect
 from unittest.mock import MagicMock
 
+import pytest
+
 from ircio.sasl import (
     SASLEcdsaNist256pChallenge,
     SASLExternal,
@@ -98,6 +100,31 @@ def test_sasl_ecdsa_reset():
     assert sasl._step == 0
     # After reset, step 0 should return the username again
     assert sasl.step(b"") == b"nick"
+
+
+def test_sasl_ecdsa_step2_raises():
+    from ircio.exceptions import IRCAuthenticationError
+
+    key = MagicMock()
+    key.sign.return_value = b"sig"
+    sasl = SASLEcdsaNist256pChallenge("nick", key)
+
+    sasl.step(b"")  # step 0
+    sasl.step(b"\x00" * 32)  # step 1
+    with pytest.raises(IRCAuthenticationError):
+        sasl.step(b"\xff" * 32)  # step 2 — must be rejected
+    assert key.sign.call_count == 1  # signed only once
+
+
+def test_sasl_plain_reset_is_noop():
+    sasl = SASLPlain("u", "p")
+    sasl.reset()  # should not raise
+    assert sasl.step(b"") == b"\0u\0p"
+
+
+def test_sasl_external_reset_is_noop():
+    sasl = SASLExternal()
+    sasl.reset()  # should not raise
 
 
 def test_sasl_ecdsa_from_pem_file(tmp_path):
