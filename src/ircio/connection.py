@@ -66,7 +66,7 @@ class Connection:
         """Send a message (appends CRLF automatically)."""
         if self._writer is None:
             raise IRCConnectionError("Not connected")
-        line = str(message)
+        line = str(message).translate(str.maketrans("", "", "\r\n\0"))
         self._writer.write(f"{line}\r\n".encode(self.encoding))
         await self._writer.drain()
 
