@@ -62,6 +62,7 @@ class Client:
         self._dispatcher = Dispatcher()
         self._connected = False
         self._cap_ls_caps: list[str] = []
+        self._sasl_error: IRCAuthenticationError | None = None
 
         # Built-in handlers
         self._dispatcher.add_handler("PING", self._on_ping)
@@ -121,6 +122,8 @@ class Client:
             except IRCConnectionError:
                 break
             await self._dispatcher.emit(message)
+            if self._sasl_error is not None:
+                raise self._sasl_error
 
     # ------------------------------------------------------------------
     # Internal helpers
@@ -165,7 +168,8 @@ class Client:
         await self._conn.send(Message("PONG", [token]))
 
     async def _on_authenticate(self, message: Message) -> None:
-        assert self.sasl is not None
+        if self.sasl is None:
+            return
         raw = b"" if message.params == ["+"] else base64.b64decode(message.params[0])
         response = self.sasl.step(raw)
         payload = base64.b64encode(response).decode() if response else "+"
@@ -175,7 +179,7 @@ class Client:
         await self._conn.send(Message("CAP", ["END"]))
 
     async def _on_sasl_fail(self, message: Message) -> None:
-        raise IRCAuthenticationError(
+        self._sasl_error = IRCAuthenticationError(
             f"SASL authentication failed ({message.command}): "
             + (message.params[-1] if message.params else "")
         )

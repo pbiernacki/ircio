@@ -311,12 +311,40 @@ async def test_sasl_success_sends_cap_end(sasl_client: Client, mock_conn: MagicM
     assert last.params == ["END"]
 
 
-async def test_sasl_fail_raises(sasl_client: Client, mock_conn: MagicMock):
+async def test_sasl_fail_stores_error(sasl_client: Client, mock_conn: MagicMock):
     from ircio.exceptions import IRCAuthenticationError
 
     msg = Message.parse(":srv 904 testnick :SASL authentication failed")
+    await sasl_client._on_sasl_fail(msg)
+    assert isinstance(sasl_client._sasl_error, IRCAuthenticationError)
+
+
+async def test_sasl_fail_raised_from_run(mock_conn: MagicMock):
+    """run() raises IRCAuthenticationError directly, not wrapped in ExceptionGroup."""
+    import warnings
+
+    from ircio.exceptions import IRCAuthenticationError
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        c = Client(
+            "h",
+            6667,
+            nick="n",
+            user="u",
+            realname="r",
+            sasl=SASLPlain("u", "p"),
+            ssl=False,
+        )
+    c._conn = mock_conn
+    # Server sends 904 (SASL fail), then closes connection
+    mock_conn.readline = AsyncMock(
+        side_effect=[
+            Message.parse(":srv 904 n :SASL authentication failed"),
+        ]
+    )
     with pytest.raises(IRCAuthenticationError):
-        await sasl_client._on_sasl_fail(msg)
+        await c.run()
 
 
 async def test_send_strips_crlf() -> None:
