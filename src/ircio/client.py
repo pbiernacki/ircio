@@ -52,11 +52,13 @@ class Client:
         self._conn = Connection(host, port, ssl=ssl)
         self._dispatcher = Dispatcher()
         self._connected = False
+        self._cap_ls_caps: list[str] = []
 
         # Built-in handlers
         self._dispatcher.add_handler("PING", self._on_ping)
         if sasl:
             self._dispatcher.add_handler("AUTHENTICATE", self._on_authenticate)
+            self._dispatcher.add_handler("CAP", self._on_cap)
             self._dispatcher.add_handler("903", self._on_sasl_success)
             self._dispatcher.add_handler("904", self._on_sasl_fail)
             self._dispatcher.add_handler("905", self._on_sasl_fail)
@@ -122,8 +124,32 @@ class Client:
             await self._conn.send(Message("PASS", [self.password]))
         await self._conn.send(Message("NICK", [self.nick]))
         await self._conn.send(Message("USER", [self.user, "0", "*", self.realname]))
-        if self.sasl:
-            await self._conn.send(Message("CAP", ["REQ", "sasl"]))
+
+    async def _on_cap(self, message: Message) -> None:
+        if not self.sasl:
+            return
+
+        subcmd = message.params[1] if len(message.params) > 1 else ""
+
+        if subcmd == "LS":
+            # CAP LS 302 allows multiline responses: params[2] == "*" means more coming,
+            # actual caps are then in params[3]; otherwise params[2] holds the caps.
+            if len(message.params) > 2 and message.params[2] == "*":
+                caps_str = message.params[3] if len(message.params) > 3 else ""
+                self._cap_ls_caps.extend(caps_str.split())
+            else:
+                caps_str = message.params[2] if len(message.params) > 2 else ""
+                self._cap_ls_caps.extend(caps_str.split())
+                if any(c == "sasl" or c.startswith("sasl=") for c in self._cap_ls_caps):
+                    await self._conn.send(Message("CAP", ["REQ", "sasl"]))
+                else:
+                    await self._conn.send(Message("CAP", ["END"]))
+        elif subcmd == "ACK":
+            caps_str = message.params[2] if len(message.params) > 2 else ""
+            if any(c == "sasl" or c.startswith("sasl=") for c in caps_str.split()):
+                await self._conn.send(Message("AUTHENTICATE", [self.sasl.name]))
+        elif subcmd == "NAK":
+            await self._conn.send(Message("CAP", ["END"]))
 
     async def _on_ping(self, message: Message) -> None:
         token = message.params[0] if message.params else ""
