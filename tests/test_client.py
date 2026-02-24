@@ -33,6 +33,20 @@ def client(mock_conn: MagicMock) -> Client:
     return c
 
 
+@pytest.fixture
+def sasl_client(mock_conn: MagicMock) -> Client:
+    c = Client(
+        "irc.example.com",
+        6667,
+        nick="testnick",
+        user="testuser",
+        realname="Test User",
+        sasl=SASLPlain("testuser", "secret"),
+    )
+    c._conn = mock_conn
+    return c
+
+
 def sent_commands(mock_conn: MagicMock) -> list[str]:
     return [call.args[0].command for call in mock_conn.send.call_args_list]
 
@@ -174,3 +188,123 @@ async def test_on_decorator(client: Client):
     msg = Message.parse(":n!u@h PRIVMSG #ch :hello")
     await client._dispatcher.emit(msg)
     assert len(received) == 1
+
+
+# ---------------------------------------------------------------------------
+# CAP / SASL negotiation
+# ---------------------------------------------------------------------------
+
+
+def sent_messages(mock_conn: MagicMock) -> list[Message]:
+    return [call.args[0] for call in mock_conn.send.call_args_list]
+
+
+async def test_register_with_sasl_sends_cap_ls(
+    sasl_client: Client, mock_conn: MagicMock
+):
+    await sasl_client.connect()
+    cmds = sent_commands(mock_conn)
+    assert cmds[0] == "CAP"
+    cap_msg = sent_messages(mock_conn)[0]
+    assert cap_msg.params == ["LS", "302"]
+
+
+async def test_cap_ls_sasl_supported(sasl_client: Client, mock_conn: MagicMock):
+    msg = Message.parse(":srv CAP testnick LS :sasl multi-prefix")
+    await sasl_client._on_cap(msg)
+    last = mock_conn.send.call_args.args[0]
+    assert last.command == "CAP"
+    assert last.params == ["REQ", "sasl"]
+
+
+async def test_cap_ls_sasl_not_supported(sasl_client: Client, mock_conn: MagicMock):
+    msg = Message.parse(":srv CAP testnick LS :multi-prefix away-notify")
+    await sasl_client._on_cap(msg)
+    last = mock_conn.send.call_args.args[0]
+    assert last.command == "CAP"
+    assert last.params == ["END"]
+
+
+async def test_cap_ls_sasl_with_value(sasl_client: Client, mock_conn: MagicMock):
+    # CAP 302: sasl cap may carry a value like sasl=PLAIN,EXTERNAL
+    msg = Message.parse(":srv CAP testnick LS :sasl=PLAIN,EXTERNAL multi-prefix")
+    await sasl_client._on_cap(msg)
+    last = mock_conn.send.call_args.args[0]
+    assert last.command == "CAP"
+    assert last.params == ["REQ", "sasl"]
+
+
+async def test_cap_ls_multiline_sasl_in_second_batch(
+    sasl_client: Client, mock_conn: MagicMock
+):
+    # First LS line — marked with * (more coming), no sasl yet
+    first = Message.parse(":srv CAP testnick LS * :multi-prefix away-notify")
+    await sasl_client._on_cap(first)
+    # No REQ/END sent yet
+    mock_conn.send.assert_not_called()
+
+    # Final LS line — sasl present
+    final = Message.parse(":srv CAP testnick LS :sasl tls")
+    await sasl_client._on_cap(final)
+    last = mock_conn.send.call_args.args[0]
+    assert last.command == "CAP"
+    assert last.params == ["REQ", "sasl"]
+
+
+async def test_cap_ls_multiline_sasl_in_first_batch(
+    sasl_client: Client, mock_conn: MagicMock
+):
+    # sasl in the first (non-final) line — should not send REQ until final arrives
+    first = Message.parse(":srv CAP testnick LS * :sasl multi-prefix")
+    await sasl_client._on_cap(first)
+    mock_conn.send.assert_not_called()
+
+    # Final LS line — empty (no more caps)
+    final = Message.parse(":srv CAP testnick LS :")
+    await sasl_client._on_cap(final)
+    last = mock_conn.send.call_args.args[0]
+    assert last.command == "CAP"
+    assert last.params == ["REQ", "sasl"]
+
+
+async def test_cap_ls_multiline_sasl_absent(sasl_client: Client, mock_conn: MagicMock):
+    first = Message.parse(":srv CAP testnick LS * :multi-prefix")
+    await sasl_client._on_cap(first)
+    final = Message.parse(":srv CAP testnick LS :away-notify")
+    await sasl_client._on_cap(final)
+    last = mock_conn.send.call_args.args[0]
+    assert last.params == ["END"]
+
+
+async def test_cap_ack_sasl_sends_authenticate(
+    sasl_client: Client, mock_conn: MagicMock
+):
+    msg = Message.parse(":srv CAP testnick ACK :sasl")
+    await sasl_client._on_cap(msg)
+    last = mock_conn.send.call_args.args[0]
+    assert last.command == "AUTHENTICATE"
+    assert last.params == ["PLAIN"]
+
+
+async def test_cap_nak_sends_cap_end(sasl_client: Client, mock_conn: MagicMock):
+    msg = Message.parse(":srv CAP testnick NAK :sasl")
+    await sasl_client._on_cap(msg)
+    last = mock_conn.send.call_args.args[0]
+    assert last.command == "CAP"
+    assert last.params == ["END"]
+
+
+async def test_sasl_success_sends_cap_end(sasl_client: Client, mock_conn: MagicMock):
+    msg = Message.parse(":srv 903 testnick :SASL authentication successful")
+    await sasl_client._on_sasl_success(msg)
+    last = mock_conn.send.call_args.args[0]
+    assert last.command == "CAP"
+    assert last.params == ["END"]
+
+
+async def test_sasl_fail_raises(sasl_client: Client, mock_conn: MagicMock):
+    from ircio.exceptions import IRCAuthenticationError
+
+    msg = Message.parse(":srv 904 testnick :SASL authentication failed")
+    with pytest.raises(IRCAuthenticationError):
+        await sasl_client._on_sasl_fail(msg)
