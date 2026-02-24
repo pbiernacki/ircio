@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: MIT
 
 import ssl
+import warnings
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -35,14 +36,16 @@ def client(mock_conn: MagicMock) -> Client:
 
 @pytest.fixture
 def sasl_client(mock_conn: MagicMock) -> Client:
-    c = Client(
-        "irc.example.com",
-        6667,
-        nick="testnick",
-        user="testuser",
-        realname="Test User",
-        sasl=SASLPlain("testuser", "secret"),
-    )
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        c = Client(
+            "irc.example.com",
+            6667,
+            nick="testnick",
+            user="testuser",
+            realname="Test User",
+            sasl=SASLPlain("testuser", "secret"),
+        )
     c._conn = mock_conn
     return c
 
@@ -64,14 +67,20 @@ async def test_connect_no_pass_by_default(client: Client, mock_conn: MagicMock):
 
 
 async def test_connect_sends_pass_when_set(mock_conn: MagicMock):
-    c = Client("h", 6667, nick="n", user="u", realname="r", password="secret")
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        c = Client("h", 6667, nick="n", user="u", realname="r", password="secret")
     c._conn = mock_conn
     await c.connect()
     assert "PASS" in sent_commands(mock_conn)
 
 
 async def test_connect_sasl_sends_cap(mock_conn: MagicMock):
-    c = Client("h", 6667, nick="n", user="u", realname="r", sasl=SASLPlain("u", "p"))
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        c = Client(
+            "h", 6667, nick="n", user="u", realname="r", sasl=SASLPlain("u", "p")
+        )
     c._conn = mock_conn
     await c.connect()
     commands = sent_commands(mock_conn)
@@ -328,3 +337,46 @@ async def test_send_strips_crlf() -> None:
 
     written: bytes = writer.write.call_args.args[0]
     assert b"\r\n" not in written[:-2], "embedded CRLF must be stripped before write"
+
+
+# ---------------------------------------------------------------------------
+# Plaintext credential warnings
+# ---------------------------------------------------------------------------
+
+
+def test_warn_password_without_ssl():
+    with pytest.warns(match="plaintext"):
+        Client(
+            "h",
+            6667,
+            nick="n",
+            user="u",
+            realname="r",
+            password="secret",
+            ssl=False,
+        )
+
+
+def test_warn_sasl_without_ssl():
+    with pytest.warns(match="plaintext"):
+        Client(
+            "h",
+            6667,
+            nick="n",
+            user="u",
+            realname="r",
+            sasl=SASLPlain("u", "p"),
+            ssl=False,
+        )
+
+
+def test_no_warn_password_with_ssl():
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        Client("h", 6697, nick="n", user="u", realname="r", password="s", ssl=True)
+
+
+def test_no_warn_no_credentials():
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        Client("h", 6667, nick="n", user="u", realname="r")

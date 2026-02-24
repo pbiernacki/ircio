@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: MIT
 
 import base64
+import warnings
 from collections.abc import Callable, Coroutine
 from typing import TYPE_CHECKING, Any
 
@@ -39,8 +40,16 @@ class Client:
         realname: str,
         password: str | None = None,
         sasl: SASLMechanism | None = None,
-        ssl: bool | ssl_module.SSLContext = False,
+        ssl: bool | ssl_module.SSLContext = True,
     ) -> None:
+        if (password or sasl) and ssl is False:
+            warnings.warn(
+                "Credentials (password/SASL) are being sent over a plaintext "
+                "connection. Set ssl=True or pass an ssl.SSLContext to encrypt "
+                "the connection.",
+                stacklevel=2,
+            )
+
         self.host = host
         self.port = port
         self.nick = nick
