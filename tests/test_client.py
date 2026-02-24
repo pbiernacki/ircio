@@ -408,3 +408,31 @@ def test_no_warn_no_credentials():
     with warnings.catch_warnings():
         warnings.simplefilter("error")
         Client("h", 6667, nick="n", user="u", realname="r")
+
+
+# ---------------------------------------------------------------------------
+# SASL reset on connect + b64decode validation
+# ---------------------------------------------------------------------------
+
+
+async def test_register_calls_sasl_reset(mock_conn: MagicMock):
+    """Client._register() must call sasl.reset() before each connection attempt."""
+    from unittest.mock import MagicMock
+
+    sasl = MagicMock()
+    sasl.name = "PLAIN"
+    c = Client("h", 6697, nick="n", user="u", realname="r", sasl=sasl)
+    c._conn = mock_conn
+    await c._register()
+    sasl.reset.assert_called_once()
+
+
+async def test_authenticate_rejects_invalid_b64(
+    sasl_client: Client, mock_conn: MagicMock
+):
+    """_on_authenticate must raise IRCAuthenticationError on malformed base64."""
+    from ircio.exceptions import IRCAuthenticationError
+
+    msg = Message("AUTHENTICATE", ["not!!valid==base64"])
+    with pytest.raises(IRCAuthenticationError, match="base64"):
+        await sasl_client._on_authenticate(msg)

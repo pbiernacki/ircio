@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: MIT
 
 import base64
+import binascii
 import warnings
 from collections.abc import Callable, Coroutine
 from typing import TYPE_CHECKING, Any
@@ -131,6 +132,7 @@ class Client:
 
     async def _register(self) -> None:
         if self.sasl:
+            self.sasl.reset()
             await self._conn.send(Message("CAP", ["LS", "302"]))
         if self.password:
             await self._conn.send(Message("PASS", [self.password]))
@@ -170,7 +172,15 @@ class Client:
     async def _on_authenticate(self, message: Message) -> None:
         if self.sasl is None:
             return
-        raw = b"" if message.params == ["+"] else base64.b64decode(message.params[0])
+        if message.params == ["+"]:
+            raw = b""
+        else:
+            try:
+                raw = base64.b64decode(message.params[0], validate=True)
+            except binascii.Error as exc:
+                raise IRCAuthenticationError(
+                    "Invalid base64 in AUTHENTICATE message"
+                ) from exc
         response = self.sasl.step(raw)
         payload = base64.b64encode(response).decode() if response else "+"
         await self._conn.send(Message("AUTHENTICATE", [payload]))
