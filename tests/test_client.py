@@ -1,6 +1,7 @@
 # SPDX-FileCopyrightText: 2026 Paweł Biernacki
 # SPDX-License-Identifier: MIT
 
+import asyncio
 import ssl
 import warnings
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -8,6 +9,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from ircio.client import Client
+from ircio.exceptions import IRCConnectionError
 from ircio.message import Message
 from ircio.sasl import SASLPlain
 
@@ -436,3 +438,58 @@ async def test_authenticate_rejects_invalid_b64(
     msg = Message("AUTHENTICATE", ["not!!valid==base64"])
     with pytest.raises(IRCAuthenticationError, match="base64"):
         await sasl_client._on_authenticate(msg)
+
+
+# ---------------------------------------------------------------------------
+# Resilience: LimitOverrunError, timeout, CAP LS limit
+# ---------------------------------------------------------------------------
+
+
+async def test_readline_limit_overrun_raises_connection_error():
+    """LimitOverrunError from asyncio must be wrapped as IRCConnectionError."""
+    from ircio.connection import Connection
+
+    conn = Connection("h", 1)
+    reader = MagicMock()
+    reader.readline = AsyncMock(side_effect=asyncio.LimitOverrunError("too long", 0))
+    conn._reader = reader
+
+    with pytest.raises(IRCConnectionError):
+        await conn.readline()
+
+
+async def test_connect_timeout_raises_connection_error():
+    """A TimeoutError during connect must be wrapped as IRCConnectionError."""
+    from ircio.connection import Connection
+
+    with patch("ircio.connection.asyncio.open_connection", new_callable=AsyncMock) as m:
+        m.side_effect = TimeoutError
+        conn = Connection("h", 1, ssl=False, timeout=0.001)
+        with pytest.raises(IRCConnectionError, match="timed out"):
+            await conn.connect()
+
+
+async def test_readline_timeout_raises_connection_error():
+    """A TimeoutError during readline must be wrapped as IRCConnectionError."""
+    from ircio.connection import Connection
+
+    conn = Connection("h", 1, timeout=0.001)
+    reader = MagicMock()
+    reader.readline = AsyncMock(side_effect=TimeoutError)
+    conn._reader = reader
+
+    with pytest.raises(IRCConnectionError, match="timed out"):
+        await conn.readline()
+
+
+async def test_cap_ls_limit(sasl_client: Client, mock_conn: MagicMock):
+    """_cap_ls_caps must not grow beyond _CAP_LS_MAX entries."""
+    from ircio.client import _CAP_LS_MAX
+
+    # Flood with continuation lines
+    caps = " ".join(f"cap{i}" for i in range(50))
+    for _ in range(_CAP_LS_MAX):
+        msg = Message.parse(f":srv CAP testnick LS * :{caps}")
+        await sasl_client._on_cap(msg)
+
+    assert len(sasl_client._cap_ls_caps) <= _CAP_LS_MAX

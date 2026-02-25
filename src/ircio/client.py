@@ -19,6 +19,8 @@ if TYPE_CHECKING:
 
 type AsyncHandler = Callable[[Message], Coroutine[Any, Any, None]]
 
+_CAP_LS_MAX = 500  # maximum capabilities accumulated across CAP LS continuation lines
+
 
 class Client:
     """
@@ -42,6 +44,7 @@ class Client:
         password: str | None = None,
         sasl: SASLMechanism | None = None,
         ssl: bool | ssl_module.SSLContext = True,
+        timeout: float | None = None,
     ) -> None:
         if (password or sasl) and ssl is False:
             warnings.warn(
@@ -59,7 +62,7 @@ class Client:
         self.password = password
         self.sasl = sasl
 
-        self._conn = Connection(host, port, ssl=ssl)
+        self._conn = Connection(host, port, ssl=ssl, timeout=timeout)
         self._dispatcher = Dispatcher()
         self._connected = False
         self._cap_ls_caps: list[str] = []
@@ -150,10 +153,12 @@ class Client:
             # actual caps are then in params[3]; otherwise params[2] holds the caps.
             if len(message.params) > 2 and message.params[2] == "*":
                 caps_str = message.params[3] if len(message.params) > 3 else ""
-                self._cap_ls_caps.extend(caps_str.split())
+                if len(self._cap_ls_caps) < _CAP_LS_MAX:
+                    self._cap_ls_caps.extend(caps_str.split())
             else:
                 caps_str = message.params[2] if len(message.params) > 2 else ""
-                self._cap_ls_caps.extend(caps_str.split())
+                if len(self._cap_ls_caps) < _CAP_LS_MAX:
+                    self._cap_ls_caps.extend(caps_str.split())
                 if any(c == "sasl" or c.startswith("sasl=") for c in self._cap_ls_caps):
                     await self._conn.send(Message("CAP", ["REQ", "sasl"]))
                 else:

@@ -27,11 +27,13 @@ class Connection:
         *,
         ssl: bool | ssl_module.SSLContext = True,
         encoding: str = "utf-8",
+        timeout: float | None = None,
     ) -> None:
         self.host = host
         self.port = port
         self.ssl = ssl
         self.encoding = encoding
+        self.timeout = timeout
         self._reader: asyncio.StreamReader | None = None
         self._writer: asyncio.StreamWriter | None = None
 
@@ -46,9 +48,14 @@ class Connection:
                 ssl_ctx = None
 
         try:
-            self._reader, self._writer = await asyncio.open_connection(
-                self.host, self.port, ssl=ssl_ctx
+            coro = asyncio.open_connection(self.host, self.port, ssl=ssl_ctx)
+            self._reader, self._writer = await asyncio.wait_for(
+                coro, timeout=self.timeout
             )
+        except TimeoutError as exc:
+            raise IRCConnectionError(
+                f"Connection to {self.host}:{self.port} timed out"
+            ) from exc
         except OSError as exc:
             raise IRCConnectionError(
                 f"Cannot connect to {self.host}:{self.port}"
@@ -75,8 +82,10 @@ class Connection:
         if self._reader is None:
             raise IRCConnectionError("Not connected")
         try:
-            data = await self._reader.readline()
-        except OSError as exc:
+            data = await asyncio.wait_for(self._reader.readline(), timeout=self.timeout)
+        except TimeoutError as exc:
+            raise IRCConnectionError("Read timed out") from exc
+        except (OSError, asyncio.LimitOverrunError) as exc:
             raise IRCConnectionError("Connection lost") from exc
         if not data:
             raise IRCConnectionError("Connection closed by remote host")
