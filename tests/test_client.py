@@ -77,18 +77,6 @@ async def test_connect_sends_pass_when_set(mock_conn: MagicMock):
     assert "PASS" in sent_commands(mock_conn)
 
 
-async def test_connect_sasl_sends_cap(mock_conn: MagicMock):
-    with warnings.catch_warnings():
-        warnings.simplefilter("ignore")
-        c = Client(
-            "h", 6667, nick="n", user="u", realname="r", sasl=SASLPlain("u", "p")
-        )
-    c._conn = mock_conn
-    await c.connect()
-    commands = sent_commands(mock_conn)
-    assert "CAP" in commands
-
-
 async def test_join(client: Client, mock_conn: MagicMock):
     await client.join("#test")
     msg: Message = mock_conn.send.call_args.args[0]

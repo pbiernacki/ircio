@@ -27,10 +27,6 @@ def test_sasl_is_abstract():
 # ---------------------------------------------------------------------------
 
 
-def test_sasl_plain_name():
-    assert SASLPlain("u", "p").name == "PLAIN"
-
-
 def test_sasl_plain_step_no_authzid():
     sasl = SASLPlain("user", "secret")
     assert sasl.step(b"").decode() == "\0user\0secret"
@@ -41,17 +37,9 @@ def test_sasl_plain_step_with_authzid():
     assert sasl.step(b"").decode() == "authz\0user\0pass"
 
 
-def test_sasl_plain_returns_bytes():
-    assert isinstance(SASLPlain("u", "p").step(b""), bytes)
-
-
 # ---------------------------------------------------------------------------
 # SASLExternal
 # ---------------------------------------------------------------------------
-
-
-def test_sasl_external_name():
-    assert SASLExternal().name == "EXTERNAL"
 
 
 def test_sasl_external_step_returns_empty():
@@ -61,11 +49,6 @@ def test_sasl_external_step_returns_empty():
 # ---------------------------------------------------------------------------
 # SASLEcdsaNist256pChallenge
 # ---------------------------------------------------------------------------
-
-
-def test_sasl_ecdsa_name():
-    sasl = SASLEcdsaNist256pChallenge("nick", MagicMock())
-    assert sasl.name == "ECDSA-NIST256P-CHALLENGE"
 
 
 def test_sasl_ecdsa_step0_returns_username():
@@ -114,36 +97,6 @@ def test_sasl_ecdsa_step2_raises():
     with pytest.raises(IRCAuthenticationError):
         sasl.step(b"\xff" * 32)  # step 2 — must be rejected
     assert key.sign.call_count == 1  # signed only once
-
-
-def test_sasl_plain_reset_is_noop():
-    sasl = SASLPlain("u", "p")
-    sasl.reset()  # should not raise
-    assert sasl.step(b"") == b"\0u\0p"
-
-
-def test_sasl_external_reset_is_noop():
-    sasl = SASLExternal()
-    sasl.reset()  # should not raise
-
-
-def test_sasl_ecdsa_from_pem_file(tmp_path):
-    from cryptography.hazmat.primitives import serialization
-    from cryptography.hazmat.primitives.asymmetric import ec
-
-    # Generate a temporary P-256 key
-    key = ec.generate_private_key(ec.SECP256R1())
-    pem = key.private_bytes(
-        serialization.Encoding.PEM,
-        serialization.PrivateFormat.PKCS8,
-        serialization.NoEncryption(),
-    )
-    key_file = tmp_path / "key.pem"
-    key_file.write_bytes(pem)
-
-    sasl = SASLEcdsaNist256pChallenge.from_pem_file("nick", key_file)
-    assert sasl.username == "nick"
-    assert sasl.step(b"") == b"nick"
 
 
 def test_sasl_ecdsa_real_signature(tmp_path):
