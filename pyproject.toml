@@ -63,3 +63,4 @@ ignore = [
 "tests/*" = [
     "ANN",  # no annotation requirement in tests
 ]
+"src/ircio/*.pyi" = ["ANN", "TCH"]
