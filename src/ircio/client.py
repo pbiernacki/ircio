@@ -89,6 +89,11 @@ class Client:
         """Register a handler function for an IRC command."""
         self._dispatcher.add_handler(command, handler)
 
+    @property
+    def is_connected(self) -> bool:
+        """Return True if the client is currently connected."""
+        return self._connected
+
     async def connect(self) -> None:
         """Connect and send registration commands."""
         await self._conn.connect()
@@ -150,6 +155,7 @@ class Client:
         if self.sasl:
             self.sasl.reset()
             self._cap_ls_caps = []
+            self._sasl_error = None
             await self._conn.send(Message("CAP", ["LS", "302"]))
         if self.password:
             await self._conn.send(Message("PASS", [self.password]))
