@@ -81,7 +81,7 @@ class Client:
     # Public API
     # ------------------------------------------------------------------
 
-    def on(self, command: str) -> Callable[[AsyncHandler], AsyncHandler]:
+    def on(self, command: str) -> Callable[[AsyncHandler], None]:
         """Decorator to register a handler for an IRC command."""
         return self._dispatcher.on(command)
 
