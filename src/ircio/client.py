@@ -138,15 +138,17 @@ class Client:
         Typically called as a task:
             asyncio.create_task(client.run())
         """
-        while True:
-            try:
-                message = await self._conn.readline()
-            except IRCConnectionError:
-                break
-            await self._dispatcher.emit(message)
-            if self._sasl_error is not None:
-                raise self._sasl_error
-        self._connected = False
+        try:
+            while True:
+                try:
+                    message = await self._conn.readline()
+                except IRCConnectionError:
+                    break
+                await self._dispatcher.emit(message)
+                if self._sasl_error is not None:
+                    raise self._sasl_error
+        finally:
+            self._connected = False
 
     # ------------------------------------------------------------------
     # Internal helpers
