@@ -39,6 +39,9 @@ class Connection:
 
     async def connect(self) -> None:
         """Open the TCP (or TLS) connection."""
+        if self._writer is not None:
+            await self.disconnect()
+
         match self.ssl:
             case ssl_module.SSLContext():
                 ssl_ctx: ssl_module.SSLContext | None = self.ssl
