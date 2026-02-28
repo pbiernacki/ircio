@@ -85,6 +85,10 @@ class Client:
         """Decorator to register a handler for an IRC command."""
         return self._dispatcher.on(command)
 
+    def add_handler(self, command: str, handler: AsyncHandler) -> None:
+        """Register a handler function for an IRC command."""
+        self._dispatcher.add_handler(command, handler)
+
     async def connect(self) -> None:
         """Connect and send registration commands."""
         await self._conn.connect()
