@@ -8,6 +8,7 @@ from .exceptions import (
     IRCAuthenticationError,
     IRCConnectionError,
     IRCError,
+    IRCHandlerError,
     IRCParseError,
 )
 from .message import Message
@@ -20,6 +21,7 @@ __all__ = [
     "IRCAuthenticationError",
     "IRCConnectionError",
     "IRCError",
+    "IRCHandlerError",
     "IRCParseError",
     "Message",
     "SASLEcdsaNist256pChallenge",

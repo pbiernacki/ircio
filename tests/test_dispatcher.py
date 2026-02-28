@@ -4,6 +4,7 @@
 import pytest
 
 from ircio.dispatcher import Dispatcher
+from ircio.exceptions import IRCHandlerError
 from ircio.message import Message
 
 
@@ -94,3 +95,42 @@ async def test_handler_receives_message(dispatcher: Dispatcher):
     await dispatcher.emit(msg)
     assert len(received) == 1
     assert received[0].params == ["#ch", "hello"]
+
+
+async def test_emit_single_handler_error(dispatcher: Dispatcher):
+    async def bad(msg: Message) -> None:
+        raise ValueError("oops")
+
+    dispatcher.add_handler("PRIVMSG", bad)
+    with pytest.raises(ValueError, match="oops"):
+        await dispatcher.emit(Message("PRIVMSG", ["#c", "hi"]))
+
+
+async def test_emit_multi_handler_one_error(dispatcher: Dispatcher):
+    called: list[int] = []
+
+    async def ok(msg: Message) -> None:
+        called.append(1)
+
+    async def bad(msg: Message) -> None:
+        raise RuntimeError("boom")
+
+    dispatcher.add_handler("PRIVMSG", ok)
+    dispatcher.add_handler("PRIVMSG", bad)
+    with pytest.raises(RuntimeError, match="boom"):
+        await dispatcher.emit(Message("PRIVMSG", ["#c", "hi"]))
+    assert called == [1]
+
+
+async def test_emit_multi_handler_all_errors(dispatcher: Dispatcher):
+    async def bad1(msg: Message) -> None:
+        raise ValueError("v")
+
+    async def bad2(msg: Message) -> None:
+        raise RuntimeError("r")
+
+    dispatcher.add_handler("PRIVMSG", bad1)
+    dispatcher.add_handler("PRIVMSG", bad2)
+    with pytest.raises(IRCHandlerError) as exc_info:
+        await dispatcher.emit(Message("PRIVMSG", ["#c", "hi"]))
+    assert len(exc_info.value.errors) == 2

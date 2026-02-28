@@ -16,3 +16,11 @@ class IRCParseError(IRCError):
 
 class IRCAuthenticationError(IRCError):
     """Raised when SASL or password authentication fails."""
+
+
+class IRCHandlerError(IRCError):
+    """Raised by Dispatcher.emit() when one or more handlers raise an exception."""
+
+    def __init__(self, errors: list[BaseException]) -> None:
+        super().__init__(f"{len(errors)} handler(s) raised exceptions")
+        self.errors = errors
