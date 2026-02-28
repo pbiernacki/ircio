@@ -6,6 +6,7 @@ from collections import defaultdict
 from collections.abc import Callable, Coroutine
 from typing import Any
 
+from .exceptions import IRCHandlerError
 from .message import Message
 
 type AsyncHandler = Callable[[Message], Coroutine[Any, Any, None]]
@@ -38,6 +39,20 @@ class Dispatcher:
         handlers = self._handlers.get(message.command, []) + self._handlers.get("*", [])
         if not handlers:
             return
+
+        errors: list[BaseException] = []
+
+        async def _run(h: AsyncHandler) -> None:
+            try:
+                await h(message)
+            except Exception as exc:
+                errors.append(exc)
+
         async with asyncio.TaskGroup() as tg:
-            for handler in handlers:
-                tg.create_task(handler(message))
+            for h in handlers:
+                tg.create_task(_run(h))
+
+        if len(errors) == 1:
+            raise errors[0]
+        if errors:
+            raise IRCHandlerError(errors)

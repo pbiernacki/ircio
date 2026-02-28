@@ -14,6 +14,9 @@ from .exceptions import (
     IRCError as IRCError,
 )
 from .exceptions import (
+    IRCHandlerError as IRCHandlerError,
+)
+from .exceptions import (
     IRCParseError as IRCParseError,
 )
 from .message import Message as Message
