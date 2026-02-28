@@ -99,6 +99,22 @@ def test_sasl_ecdsa_step2_raises():
     assert key.sign.call_count == 1  # signed only once
 
 
+def test_sasl_ecdsa_from_pem_non_ec_raises(tmp_path):
+    from cryptography.hazmat.primitives import serialization
+    from cryptography.hazmat.primitives.asymmetric import rsa
+
+    key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    pem = key.private_bytes(
+        serialization.Encoding.PEM,
+        serialization.PrivateFormat.PKCS8,
+        serialization.NoEncryption(),
+    )
+    key_file = tmp_path / "rsa.pem"
+    key_file.write_bytes(pem)
+    with pytest.raises(ValueError, match="EC private key"):
+        SASLEcdsaNist256pChallenge.from_pem_file("nick", key_file)
+
+
 def test_sasl_ecdsa_real_signature(tmp_path):
     from cryptography.hazmat.primitives import hashes, serialization
     from cryptography.hazmat.primitives.asymmetric import ec

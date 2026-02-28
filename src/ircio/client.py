@@ -117,6 +117,15 @@ class Client:
     async def notice(self, target: str, text: str) -> None:
         await self._conn.send(Message("NOTICE", [target, text]))
 
+    async def set_nick(self, nick: str) -> None:
+        """Send NICK and update the stored nickname."""
+        self.nick = nick
+        await self._conn.send(Message("NICK", [nick]))
+
+    async def send(self, message: Message) -> None:
+        """Send a raw IRC message."""
+        await self._conn.send(message)
+
     async def run(self) -> None:
         """
         Main read loop — reads messages and dispatches them until disconnected.
@@ -140,6 +149,7 @@ class Client:
     async def _register(self) -> None:
         if self.sasl:
             self.sasl.reset()
+            self._cap_ls_caps = []
             await self._conn.send(Message("CAP", ["LS", "302"]))
         if self.password:
             await self._conn.send(Message("PASS", [self.password]))

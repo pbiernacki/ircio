@@ -119,6 +119,9 @@ class SASLEcdsaNist256pChallenge(SASLMechanism):
     ) -> SASLEcdsaNist256pChallenge:
         """Load the ECDSA private key from a PEM file."""
         try:
+            from cryptography.hazmat.primitives.asymmetric.ec import (
+                EllipticCurvePrivateKey,
+            )
             from cryptography.hazmat.primitives.serialization import (
                 load_pem_private_key,
             )
@@ -126,7 +129,9 @@ class SASLEcdsaNist256pChallenge(SASLMechanism):
             raise ImportError(_CRYPTOGRAPHY_MISSING) from exc
 
         key = load_pem_private_key(Path(path).read_bytes(), password=password)
-        return cls(username, key)  # type: ignore[arg-type]
+        if not isinstance(key, EllipticCurvePrivateKey):
+            raise ValueError("PEM file does not contain an EC private key")
+        return cls(username, key)
 
     def reset(self) -> None:
         """Reset authentication state (called automatically before each connect)."""

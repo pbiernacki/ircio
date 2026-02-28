@@ -387,3 +387,27 @@ async def test_cap_ls_limit(sasl_client: Client, mock_conn: MagicMock):
         await sasl_client._on_cap(msg)
 
     assert len(sasl_client._cap_ls_caps) <= _CAP_LS_MAX
+
+
+async def test_register_resets_cap_ls_caps(mock_conn: MagicMock):
+    sasl = MagicMock()
+    sasl.name = "PLAIN"
+    c = Client("h", 6697, nick="n", user="u", realname="r", sasl=sasl)
+    c._conn = mock_conn
+    c._cap_ls_caps = ["leftover-cap"]
+    await c._register()
+    assert c._cap_ls_caps == []
+
+
+async def test_set_nick(client: Client, mock_conn: MagicMock):
+    await client.set_nick("newnick")
+    msg: Message = mock_conn.send.call_args.args[0]
+    assert msg.command == "NICK"
+    assert msg.params == ["newnick"]
+    assert client.nick == "newnick"
+
+
+async def test_send(client: Client, mock_conn: MagicMock):
+    msg = Message("AWAY", ["brb"])
+    await client.send(msg)
+    mock_conn.send.assert_called_once_with(msg)
