@@ -363,12 +363,13 @@ async def test_register_calls_sasl_reset(mock_conn: MagicMock):
 async def test_authenticate_rejects_invalid_b64(
     sasl_client: Client, mock_conn: MagicMock
 ):
-    """_on_authenticate must raise IRCAuthenticationError on malformed base64."""
+    """Bad base64 in AUTHENTICATE sets _sasl_error (not a direct raise)."""
     from ircio.exceptions import IRCAuthenticationError
 
     msg = Message("AUTHENTICATE", ["not!!valid==base64"])
-    with pytest.raises(IRCAuthenticationError, match="base64"):
-        await sasl_client._on_authenticate(msg)
+    await sasl_client._on_authenticate(msg)
+    assert isinstance(sasl_client._sasl_error, IRCAuthenticationError)
+    assert "base64" in str(sasl_client._sasl_error)
 
 
 # ---------------------------------------------------------------------------
