@@ -411,3 +411,23 @@ async def test_send(client: Client, mock_conn: MagicMock):
     msg = Message("AWAY", ["brb"])
     await client.send(msg)
     mock_conn.send.assert_called_once_with(msg)
+
+
+async def test_register_resets_sasl_error(mock_conn: MagicMock):
+    from ircio.exceptions import IRCAuthenticationError
+
+    sasl = MagicMock()
+    sasl.name = "PLAIN"
+    c = Client("h", 6697, nick="n", user="u", realname="r", sasl=sasl)
+    c._conn = mock_conn
+    c._sasl_error = IRCAuthenticationError("stale error")
+    await c._register()
+    assert c._sasl_error is None
+
+
+async def test_is_connected(client: Client, mock_conn: MagicMock):
+    assert not client.is_connected
+    await client.connect()
+    assert client.is_connected
+    await client.disconnect()
+    assert not client.is_connected
