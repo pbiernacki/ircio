@@ -21,12 +21,11 @@ class Dispatcher:
     def __init__(self) -> None:
         self._handlers: defaultdict[str, list[AsyncHandler]] = defaultdict(list)
 
-    def on(self, command: str) -> Callable[[AsyncHandler], AsyncHandler]:
+    def on(self, command: str) -> Callable[[AsyncHandler], None]:
         """Decorator that registers a handler for the given command."""
 
-        def decorator(func: AsyncHandler) -> AsyncHandler:
+        def decorator(func: AsyncHandler) -> None:
             self._handlers[command.upper()].append(func)
-            return func
 
         return decorator
 
