@@ -146,6 +146,7 @@ class Client:
             await self._dispatcher.emit(message)
             if self._sasl_error is not None:
                 raise self._sasl_error
+        self._connected = False
 
     # ------------------------------------------------------------------
     # Internal helpers
