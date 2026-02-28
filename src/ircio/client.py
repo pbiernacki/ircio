@@ -205,10 +205,11 @@ class Client:
         else:
             try:
                 raw = base64.b64decode(message.params[0], validate=True)
-            except binascii.Error as exc:
-                raise IRCAuthenticationError(
+            except binascii.Error:
+                self._sasl_error = IRCAuthenticationError(
                     "Invalid base64 in AUTHENTICATE message"
-                ) from exc
+                )
+                return
         response = self.sasl.step(raw)
         payload = base64.b64encode(response).decode() if response else "+"
         await self._conn.send(Message("AUTHENTICATE", [payload]))
