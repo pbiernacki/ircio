@@ -4,20 +4,18 @@
 import base64
 import binascii
 import warnings
-from collections.abc import Callable, Coroutine
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from .connection import Connection
-from .dispatcher import Dispatcher
+from .dispatcher import AsyncHandler, Dispatcher
 from .exceptions import IRCAuthenticationError, IRCConnectionError
 from .message import Message
 
 if TYPE_CHECKING:
     import ssl as ssl_module
+    from collections.abc import Callable
 
     from .sasl import SASLMechanism
-
-type AsyncHandler = Callable[[Message], Coroutine[Any, Any, None]]
 
 _CAP_LS_MAX = 500  # maximum capabilities accumulated across CAP LS continuation lines
 
@@ -174,14 +172,12 @@ class Client:
         if subcmd == "LS":
             # CAP LS 302 allows multiline responses: params[2] == "*" means more coming,
             # actual caps are then in params[3]; otherwise params[2] holds the caps.
-            if len(message.params) > 2 and message.params[2] == "*":
-                caps_str = message.params[3] if len(message.params) > 3 else ""
-                if len(self._cap_ls_caps) < _CAP_LS_MAX:
-                    self._cap_ls_caps.extend(caps_str.split())
-            else:
-                caps_str = message.params[2] if len(message.params) > 2 else ""
-                if len(self._cap_ls_caps) < _CAP_LS_MAX:
-                    self._cap_ls_caps.extend(caps_str.split())
+            multiline = len(message.params) > 2 and message.params[2] == "*"
+            idx = 3 if multiline else 2
+            caps_str = message.params[idx] if len(message.params) > idx else ""
+            if len(self._cap_ls_caps) < _CAP_LS_MAX:
+                self._cap_ls_caps.extend(caps_str.split())
+            if not multiline:
                 if any(c == "sasl" or c.startswith("sasl=") for c in self._cap_ls_caps):
                     await self._conn.send(Message("CAP", ["REQ", "sasl"]))
                 else:
