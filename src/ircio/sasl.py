@@ -138,21 +138,20 @@ class SASLEcdsaNist256pChallenge(SASLMechanism):
         self._step = 0
 
     def step(self, challenge: bytes) -> bytes:
-        if self._step == 0:
-            self._step += 1
-            return self.username.encode()
-
-        if self._step == 1:
-            self._step += 1
-            # Sign the server challenge (DER-encoded ECDSA signature, SHA-256).
-            try:
-                from cryptography.hazmat.primitives import hashes
-                from cryptography.hazmat.primitives.asymmetric import ec
-            except ImportError as exc:
-                raise ImportError(_CRYPTOGRAPHY_MISSING) from exc
-
-            return self._private_key.sign(challenge, ec.ECDSA(hashes.SHA256()))
-
-        raise IRCAuthenticationError(
-            "Unexpected AUTHENTICATE message after ECDSA exchange completed"
-        )
+        match self._step:
+            case 0:
+                self._step += 1
+                return self.username.encode()
+            case 1:
+                self._step += 1
+                # Sign the server challenge (DER-encoded ECDSA signature, SHA-256).
+                try:
+                    from cryptography.hazmat.primitives import hashes
+                    from cryptography.hazmat.primitives.asymmetric import ec
+                except ImportError as exc:
+                    raise ImportError(_CRYPTOGRAPHY_MISSING) from exc
+                return self._private_key.sign(challenge, ec.ECDSA(hashes.SHA256()))
+            case _:
+                raise IRCAuthenticationError(
+                    "Unexpected AUTHENTICATE message after ECDSA exchange completed"
+                )
